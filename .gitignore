@@ -1,0 +1,99 @@
+# ==============================================================================
+# Python
+# ==============================================================================
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Virtual Environments
+.venv/
+venv/
+ENV/
+env/
+env.bak/
+venv.bak/
+
+# Testing & Type-checking
+.pytest_cache/
+.mypy_cache/
+.coverage
+htmlcov/
+
+# ==============================================================================
+# Unity
+# ==============================================================================
+# Cache, temporary, and generated folders
+**/[Ll]ibrary/
+**/[Tt]emp/
+**/[Oo]bj/
+**/[Bb]uild/
+**/[Bb]uilds/
+**/[Ll]ogs/
+**/[Uu]ser[Ss]ettings/
+**/[Mm]emoryCaptures/
+
+# Visual Studio / Rider / IDE solution and project files
+**/*.csproj
+**/*.unityproj
+**/*.sln
+**/*.slnx
+**/*.suo
+**/*.user
+**/*.userprefs
+**/*.pidb
+**/*.booproj
+**/*.svd
+**/*.pdb
+**/*.mdb
+**/.vs/
+*.sln
+*.slnx
+.vs/
+
+# Unity crash reports & diagnostics
+sysinfo.txt
+crashlytics-build.properties
+
+# Builds & WebGL
+**/[Rr]ecordings/
+*.apk
+*.aab
+*.unitypackage
+
+# Never ignore .meta files
+!*.meta
+
+# ==============================================================================
+# Operating System & Editors
+# ==============================================================================
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+Desktop.ini
+
+# VS Code / JetBrains
+.vscode/
+.idea/
+*.sublime-project
+*.sublime-workspace

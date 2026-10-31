@@ -1,0 +1,33 @@
+# Auto-detect text files and perform line-ending normalization
+* text=auto
+
+# Code and configuration diff drivers
+*.cs text diff=csharp
+*.py text diff=python
+*.json text
+*.xml text
+*.txt text
+*.md text
+*.yaml text
+*.yml text
+*.cginc text
+*.shader text
+
+# Unity text assets & serialization
+*.mat text
+*.prefab text
+*.unity text
+*.asset text
+*.meta text
+*.inputactions text
+
+# Binary formats (prevent CRLF tampering)
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.tga binary
+*.psd binary
+*.ttf binary
+*.otf binary
+*.ico binary
+*.pdf binary
