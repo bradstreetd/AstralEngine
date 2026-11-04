@@ -130,6 +130,16 @@ def send_orbit(
         else:
             lla_coords = lla_arr
 
+    # Length consistency validation
+    t_len = len(time)
+    r_len = len(r_coords)
+    if t_len != r_len:
+        print(f"[UnityBridge] WARNING: Time array length ({t_len}) does not match trajectory positions ({r_len})!")
+    if lla_coords is not None and len(lla_coords) != r_len:
+        print(f"[UnityBridge] WARNING: LLA array length ({len(lla_coords)}) does not match trajectory positions ({r_len})!")
+    if v_coords is not None and len(v_coords) != r_len:
+        print(f"[UnityBridge] WARNING: Velocity array length ({len(v_coords)}) does not match trajectory positions ({r_len})!")
+
     # Body information
     body_data = {}
     if central_body is not None:

@@ -524,7 +524,7 @@ namespace OrbitVisualization.Visuals
             // 1. Update every tracked satellite
             foreach (var orb in trackedOrbits)
             {
-                if (orb.unityTrajectory == null || orb.unityTrajectory.Length < 2 || orb.satelliteInstance == null)
+                if (orb.times == null || orb.times.Length < 2 || orb.unityTrajectory == null || orb.unityTrajectory.Length < 2 || orb.satelliteInstance == null)
                     continue;
 
                 orb.satelliteInstance.SetActive(orb.isVisible);
@@ -538,8 +538,11 @@ namespace OrbitVisualization.Visuals
                 float clampedTime = Mathf.Clamp(_currentSimTime, startTime, endTime);
 
                 // Binary search for sample interval [idx, idx+1]
+                int maxValidIndex = Mathf.Min(orb.times.Length, orb.unityTrajectory.Length) - 2;
+                if (maxValidIndex < 0) continue;
+
                 int low = 0;
-                int high = orb.unityTrajectory.Length - 2;
+                int high = maxValidIndex;
                 int idx = 0;
                 while (low <= high)
                 {
@@ -554,10 +557,10 @@ namespace OrbitVisualization.Visuals
                         break;
                     }
                 }
-                if (low > high) idx = Mathf.Clamp(low, 0, orb.unityTrajectory.Length - 2);
+                if (low > high) idx = Mathf.Clamp(low, 0, maxValidIndex);
 
-                float dt = Mathf.Max(orb.times[idx + 1] - orb.times[idx], 1e-6f);
-                float alpha = Mathf.Clamp01((clampedTime - orb.times[idx]) / dt);
+                float dt = orb.times[idx + 1] - orb.times[idx];
+                float alpha = dt > 1e-6f ? Mathf.Clamp01((clampedTime - orb.times[idx]) / dt) : 0f;
 
                 orb.currentSampleIdx = idx;
                 orb.currentSampleAlpha = alpha;
@@ -565,10 +568,12 @@ namespace OrbitVisualization.Visuals
                 Vector3 currentPos = Vector3.Lerp(orb.unityTrajectory[idx], orb.unityTrajectory[idx + 1], alpha);
                 orb.satelliteInstance.transform.position = currentPos;
 
-                if (orb.HasLLAData)
+                if (orb.HasLLAData && orb.llaData.Length > 0)
                 {
-                    Vector3 lla0 = orb.llaData[idx];
-                    Vector3 lla1 = orb.llaData[Mathf.Min(idx + 1, orb.llaData.Length - 1)];
+                    int i0 = Mathf.Clamp(idx, 0, orb.llaData.Length - 1);
+                    int i1 = Mathf.Clamp(idx + 1, 0, orb.llaData.Length - 1);
+                    Vector3 lla0 = orb.llaData[i0];
+                    Vector3 lla1 = orb.llaData[i1];
                     float lat = Mathf.Lerp(lla0.x, lla1.x, alpha);
                     float lon = Mathf.LerpAngle(lla0.y, lla1.y, alpha);
                     lon = Mathf.Repeat(lon + 180f, 360f) - 180f;
