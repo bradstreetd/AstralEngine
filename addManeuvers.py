@@ -8,7 +8,7 @@ import numpy as np
 from orbitCalculations import Orbit, EARTH
 from frames import Quaternion, FrameTree
 from spacecraft import Spacecraft
-from scipy.integrate import solve_ivp
+from eventHelper import EventScheduler, TimeTrigger, Maneuver
 
 
 # Set up frames
@@ -34,15 +34,17 @@ tspan = [0, period*10]
 start_nu = 90 *np.pi/180
 spacecraft_1 = Spacecraft('1', earth_orbit, start_nu)
 spacecraft_1.register_frames(ft)
-sp1_initial = spacecraft_1.get_initial_state_eci(ft)
-spacecraft_1.propagate_with_maneuvers(tspan, sp1_initial, 10000, 0.05)
+spacecraft_1.add_event(Maneuver(
+    'Burn 1',
+    trigger=TimeTrigger(target_time=10000),
+    delta_v=np.array([0,0.05,0]),
+    frame='rth'))
+spacecraft_1.propagate(tspan, ft)
 
 # Spacecraft 2 (No Maneuver)
 spacecraft_2 = Spacecraft('2', earth_orbit, start_nu)
 spacecraft_2.register_frames(ft)
-sp2_initial = spacecraft_2.get_initial_state_eci(ft)
-spacecraft_2.propagate_with_maneuvers(tspan, sp2_initial, 10000, 0)
-
+spacecraft_2.propagate(tspan, ft)
 
 # Example to show getting basis for all frames
 # r_lla = spacecraft_1.get_state('lla', ft)

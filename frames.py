@@ -47,6 +47,42 @@ class Quaternion:
         q_aop = cls.from_axis_angle([0, 0, 1], aop)
         pqw_Q_eci = q_aop * q_inc * q_raan
         return ~pqw_Q_eci  # Returns Q_eci_pqw (to_parent)
+    
+    @classmethod
+    def from_dcm(cls, dcm) -> "Quaternion":
+        dcm = np.asarray(dcm, dtype=float)
+        if dcm.shape != (3, 3):
+            raise ValueError("DCM must be a 3x3 matrix")
+        
+        x_4 = 1 + dcm[0, 0] - dcm[1, 1] - dcm[2, 2]
+        y_4 = 1 - dcm[0, 0] + dcm[1, 1] - dcm[2, 2]
+        z_4 = 1 - dcm[0, 0] - dcm[1, 1] + dcm[2, 2]
+        w_4 = 1 + dcm[0, 0] + dcm[1, 1] + dcm[2, 2]
+
+        max_idx = np.argmax([x_4, y_4, z_4, w_4])
+
+        if max_idx == 3:  # q_w is largest
+            w = 0.5 * np.sqrt(w_4)
+            x = (dcm[1,2] - dcm[2,1]) / (4.0 * w)
+            y = (dcm[2,0] - dcm[0,2]) / (4.0 * w)
+            z = (dcm[0,1] - dcm[1,0]) / (4.0 * w)
+        elif max_idx == 0:  # q_x is largest
+            x = 0.5 * np.sqrt(x_4)
+            w = (dcm[1,2] - dcm[2,1]) / (4.0 * x)
+            y = (dcm[0,1] + dcm[1,0]) / (4.0 * x)
+            z = (dcm[0,2] + dcm[2,0]) / (4.0 * x)
+        elif max_idx == 1:  # q_y is largest
+            y = 0.5 * np.sqrt(y_4)
+            w = (dcm[2,0] - dcm[0,2]) / (4.0 * y)
+            x = (dcm[0,1] + dcm[1,0]) / (4.0 * y)
+            z = (dcm[1,2] + dcm[2,1]) / (4.0 * y)
+        else:  # q_z is largest
+            z = 0.5 * np.sqrt(z_4)
+            w = (dcm[0,1] - dcm[1,0]) / (4.0 * z)
+            x = (dcm[0,2] + dcm[2,0]) / (4.0 * z)
+            y = (dcm[1,2] + dcm[2,1]) / (4.0 * z)
+
+        return cls(x, y, z, w)
 
     def conjugate(self) -> "Quaternion":
         """Returns the quaternion conjugate / inverse: [-x, -y, -z, w]."""

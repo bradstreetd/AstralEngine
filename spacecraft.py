@@ -11,6 +11,7 @@ import numpy as np
 from scipy.integrate import solve_ivp
 from frames import Quaternion, FrameTree
 from orbitCalculations import Orbit
+from eventHelper import *
 
 class Spacecraft:
     # INITIALIZATION METHODS
@@ -18,13 +19,15 @@ class Spacecraft:
         self.name = name
         self.initial_orbit = initial_orbit
         self.initial_nu = initial_nu
+        self.scheduler = EventScheduler()
 
         # Frames for spacecraft 
         # Note: Technically should be pqw_0 since it can change with time.
         #   I think later updates should maybe consider frame handling with time, so either this is just index [0] or something
         self.local_frames = {
             'pqw': f'{self.name.lower()}_pqw',
-            'rth_0': f'{self.name.lower()}_rth_0'
+            'rth_0': f'{self.name.lower()}_rth_0',
+            'rth': f'{self.name.lower()}_rth'
         }
 
         # Propagation and Trajectory information
@@ -47,7 +50,9 @@ class Spacecraft:
 
         # rth / pqw
         q_rth_pqw = Quaternion.from_axis_angle([0,0,1], self.initial_nu) # true anomaly
+        # Add as a frame relative to eci, not pqw
         ft.add_frame(self.local_frames['rth_0'], self.local_frames['pqw'], q_from_parent=q_rth_pqw)
+        ft.add_frame(self.local_frames['rth'], 'eci', q_from_parent=q_rth_pqw*q_pqw_eci)
 
     def get_initial_state_eci(self, ft: FrameTree):
         self.initial_state_rth = self.initial_orbit.get_state_rth(self.initial_nu)
@@ -60,6 +65,99 @@ class Spacecraft:
         return np.concatenate((r_0_eci, v_0_eci))
         
     # OTHER METHODS
+
+    def add_event(self, event: Event):
+        self.scheduler.add_event(event)
+
+    def propagate(self, t_span, ft: FrameTree, num_points: int = None):
+        print(f'Starting propagation of {self.name}')
+        
+        # Get global start and end time for spacecraft
+        t_current = t_span[0]
+        t_end = t_span[-1]
+        state_current = self.get_initial_state_eci(ft)
+
+        solutions = []
+        event_times = []
+
+        while t_current < t_end:
+            # Get all active triggers
+            active_events = [e for e in self.scheduler.events if e.is_active]
+            active_triggers = [e.trigger for e in active_events]
+
+            # If out of events, propagate to the end
+            if not active_triggers:
+                sol = solve_ivp(
+                    self._dynamics, [t_current, t_end], state_current,
+                    method='RK45', atol=1e-12, rtol=1e-12,
+                    args=(self.initial_orbit.mu,), dense_output=True
+                )
+                solutions.append((t_current, t_end, sol))
+                break
+
+            # Propagate with all active triggers
+            sol = solve_ivp(
+                self._dynamics, [t_current, t_end], state_current,
+                method='RK45', atol=1e-12, rtol=1e-12,
+                args=(self.initial_orbit.mu,), events=active_triggers, dense_output=True
+            )
+
+            t_trigger_reached = sol.t[-1]
+            solutions.append((t_current, t_trigger_reached, sol))
+
+            if sol.status == 1:
+                event_idx = next(i for i, te in enumerate(sol.t_events) if len(te) > 0)
+                event_triggered = active_events[event_idx]
+                print(f'Event {event_triggered.name} triggered at t = {t_trigger_reached}')
+
+                state_before = sol.y[:,-1]
+                state_current = event_triggered.execute(t_trigger_reached, state_before, ft=ft, sc=self)
+
+                event_triggered.is_active = False
+                event_times.append((t_trigger_reached, event_triggered.name))
+
+                t_current = t_trigger_reached
+            else:
+                print('Propagation failed')
+                break
+
+        t_list = []
+        y_list = []
+
+        if num_points is not None:
+            time_grid = np.linspace(t_span[0], t_span[-1], num_points)
+            y_full = np.zeros((6, len(time_grid)))
+            # 2. Sample each segment into y_full
+            for i, (t_start, t_end, sol) in enumerate(solutions):
+                if i == 0:
+                    # First segment includes start point
+                    mask = time_grid <= t_end
+                elif i == len(solutions) - 1:
+                    # Last segment covers everything up to the end
+                    mask = time_grid > t_start
+                else:
+                    # Intermediate segments
+                    mask = (time_grid > t_start) & (time_grid <= t_end)
+                if np.any(mask):
+                    y_full[:, mask] = sol.sol(time_grid[mask])
+
+            # 3. Store on spacecraft
+            self.t = time_grid
+            self.r_eci = y_full[:3]
+            self.v_eci = y_full[3:6]
+        else:
+            for i, (t_start, t_end, sol) in enumerate(solutions):
+                if i == 0:
+                    t_list.append(sol.t)
+                    y_list.append(sol.y)
+                else:
+                    t_list.append(sol.t[1:])
+                    y_list.append(sol.y[:, 1:])
+            
+            self.t = np.concatenate(t_list)
+            y_full = np.concatenate(y_list, axis=1)
+            self.r_eci = y_full[:3]
+            self.v_eci = y_full[3:6]
     
     # Propagation with maneuvers
     # Notes for improvements and future
@@ -152,8 +250,7 @@ class Spacecraft:
             v_inertial = self.v_eci[:, index]
 
             if 'ecf' in ft.frames:
-                q_ecf_eci = Quaternion.from_axis_angle([0,0,1], self.initial_orbit.body.rotation_rate*t)
-                ft.update_frame('ecf', q_from_parent=q_ecf_eci)
+                self.update_FrameTree(ft, 'ecf', time=t)
 
             if target_frame == 'lla':
                 r_ecf = ft.transform(r_inertial, 'eci', 'ecf')
@@ -170,16 +267,13 @@ class Spacecraft:
                 return r_lla
 
             if target_frame == 'rth':
-                r_mag = np.linalg.norm(r_inertial)
-                r_hat = r_inertial / r_mag
-                h_vec = np.cross(r_inertial, v_inertial)
-                h_hat = h_vec / np.linalg.norm(h_vec)
-                e_hat = np.cross(h_hat, r_hat)
-                basis_rth_inertial = np.stack([r_hat, e_hat, h_hat])
-                r_rth = basis_rth_inertial @ r_inertial
-                v_rth = basis_rth_inertial @ v_inertial
+                state = np.concatenate((r_inertial, v_inertial))
+                self.update_FrameTree(ft, target_frame, state=state)
+                r_rth = ft.transform(r_inertial, 'eci', self.local_frames['rth'])
+                v_rth = ft.transform(v_inertial, 'eci', self.local_frames['rth'])
+                basis_rth_inertial = ft.get_basis(self.local_frames['rth'], 'eci')
                 state_target = np.concatenate((r_rth, v_rth))
-
+                
                 if return_basis:
                     return state_target, basis_rth_inertial
                 return state_target
@@ -225,3 +319,27 @@ class Spacecraft:
             else:
                 return states
     
+    # Handle immediate update to the frame tree
+    def update_FrameTree(self, ft: FrameTree, target_frame: str, state=None, time=None):
+
+        if target_frame == 'ecf':
+            if time == None:
+                raise ValueError('Time is required to update ecf frame')
+            else:
+                q_ecf_eci = Quaternion.from_axis_angle([0,0,1], self.initial_orbit.body.rotation_rate*time)
+                ft.update_frame('ecf', q_from_parent=q_ecf_eci)
+            
+        # PQW Not handled yet
+
+        # This doesn't work. This is because rth's parent is PQW. I should only need something like the true anomaly calculation
+        if target_frame == 'rth':
+            r_inertial = state[:3]
+            v_inertial = state[3:6]
+            r_mag = np.linalg.norm(r_inertial)
+            r_hat = r_inertial / r_mag
+            h_vec = np.cross(r_inertial, v_inertial)
+            h_hat = h_vec / np.linalg.norm(h_vec)
+            e_hat = np.cross(h_hat, r_hat)
+            basis_rth_inertial = np.stack([r_hat, e_hat, h_hat])
+            q_rth_inertial = Quaternion.from_dcm(basis_rth_inertial)
+            ft.update_frame(self.local_frames[target_frame], q_from_parent=q_rth_inertial)
