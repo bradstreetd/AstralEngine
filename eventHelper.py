@@ -37,6 +37,14 @@ class Event:
         self.trigger = trigger
         self.is_active = True
 
+        self.time = None
+        self.index = None
+        self.state_before = None
+        self.state_after = None
+        self.dynamics_before = None
+        self.dynamics_after = None
+        self.stm = None
+
     def execute(self, time, state, **kwargs):
         pass
 
@@ -46,6 +54,8 @@ class Maneuver(Event):
         super().__init__(name, trigger)
         self.delta_v = delta_v
         self.frame = frame
+
+        self.delta_v_eci = None
 
     # Needs to pass in frame tree and/or spacecraft itself?
     def execute(self, time, state, ft: FrameTree, sc=None, **kwargs):
@@ -71,7 +81,19 @@ class Maneuver(Event):
 
         v_eci_new = v_eci + dv_eci
 
-        return np.concatenate((r_eci, v_eci_new))
+        state_after = np.concatenate((r_eci, v_eci_new))
+
+        # Record execution metadata
+        self.time = time
+        self.state_before = state[:6].copy()
+        self.state_after = state_after.copy()
+        self.delta_v_eci = dv_eci.copy()
+
+        if sc is not None:
+            self.dynamics_before = sc.dynamics(time, self.state_before, sc.initial_orbit.mu)
+            self.dynamics_after = sc.dynamics(time, self.state_after, sc.initial_orbit.mu)
+
+        return state_after
 
 class EventScheduler:
     def __init__(self):

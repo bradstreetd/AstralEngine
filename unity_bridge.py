@@ -109,7 +109,7 @@ def send_orbit(
 
     r_arr = np.asarray(r_eci, dtype=float)
     # Ensure r is (N, 3) for clean serialization
-    if r_arr.shape[0] == 3 and r_arr.shape[1] != 3:
+    if not len(r_arr.shape) == 1 and r_arr.shape[0] == 3 and r_arr.shape[1] != 3:
         r_coords = r_arr.T
     else:
         r_coords = r_arr
@@ -117,7 +117,7 @@ def send_orbit(
     v_coords = None
     if v_eci is not None:
         v_arr = np.asarray(v_eci, dtype=float)
-        if v_arr.shape[0] == 3 and v_arr.shape[1] != 3:
+        if not len(v_arr.shape) == 1 and v_arr.shape[0] == 3 and v_arr.shape[1] != 3:
             v_coords = v_arr.T
         else:
             v_coords = v_arr
@@ -125,7 +125,7 @@ def send_orbit(
     lla_coords = None
     if r_lla is not None:
         lla_arr = np.asarray(r_lla, dtype=float)
-        if lla_arr.shape[0] == 3 and lla_arr.shape[1] != 3:
+        if not len(lla_arr.shape) == 1 and lla_arr.shape[0] == 3 and lla_arr.shape[1] != 3:
             lla_coords = lla_arr.T
         else:
             lla_coords = lla_arr

@@ -32,14 +32,43 @@ tspan = [0, period*10]
 
 # Spacecraft 1
 start_nu = 90 *np.pi/180
-spacecraft_1 = Spacecraft('1', earth_orbit, start_nu)
+spacecraft_1 = Spacecraft('1', earth_orbit, start_nu, useSTM=True)
 spacecraft_1.register_frames(ft)
 spacecraft_1.add_event(Maneuver(
     'Burn 1',
     trigger=TimeTrigger(target_time=10000),
     delta_v=np.array([0,0.05,0]),
     frame='rth'))
+spacecraft_1.add_event(Maneuver(
+    'Burn 2',
+    trigger=TimeTrigger(target_time=20000),
+    delta_v=np.array([0,0.05,0]),
+    frame='rth'))
 spacecraft_1.propagate(tspan, ft)
+
+# Perform STM adjustments
+burn_1 = spacecraft_1.get_event('Burn 1')
+burn_2 = spacecraft_1.get_event('Burn 2')
+
+t0_idx = spacecraft_1.markers[0]['index']
+tb1_idx = burn_1.index
+tb2_idx = burn_2.index
+tf_idx = spacecraft_1.markers[-1]['index']
+
+# STM describing how burn 2 changes final state
+stm_tf_tb2 = spacecraft_1.stm[:,:,tf_idx]
+dx_dv_2 = stm_tf_tb2 @ np.vstack((np.zeros((3,3)), np.eye(3)))
+# STM describing how burn 1 changes the final state
+stm_tb2_tb1 = burn_2.stm
+dx_tf_tb1 = stm_tf_tb2 @ stm_tb2_tb1 @ np.vstack((np.zeros((3,3)), np.eye(3)))
+
+# Sensitivity of burn 2 time
+dynamic_diff = burn_2.dynamics_after - burn_2.dynamics_before
+dx_dt_tb2 = stm_tf_tb2 @ dynamic_diff
+
+# Sensitivity of burn 1 time
+dynamic_diff = burn_1.dynamics_after - burn_1.dynamics_before
+dx_dt_tb1 = stm_tf_tb2 @ stm_tb2_tb1 @ dynamic_diff
 
 # Spacecraft 2 (No Maneuver)
 spacecraft_2 = Spacecraft('2', earth_orbit, start_nu)
@@ -62,10 +91,9 @@ spacecraft_2.propagate(tspan, ft)
 # }
 
 def custom_send_orbit(sc: Spacecraft, ft: FrameTree):
-    r_lla = spacecraft_1.get_state('lla', ft)
-    _, basis_ecf_eci = spacecraft_1.get_state('ecf', ft, return_basis=True)
-    _, basis_ecf_eci = spacecraft_1.get_state('ecf', ft, return_basis=True)
-    _, basis_rth_eci = spacecraft_1.get_state('rth', ft, return_basis=True)
+    r_lla = sc.get_state('lla', ft)
+    _, basis_ecf_eci = sc.get_state('ecf', ft, return_basis=True)
+    _, basis_rth_eci = sc.get_state('rth', ft, return_basis=True)
     basis_eci_eci = ft.get_basis('eci', 'eci')
 
     all_basis = {
@@ -81,10 +109,10 @@ def custom_send_orbit(sc: Spacecraft, ft: FrameTree):
         time=sc.t,
         r_eci=sc.r_eci,
         v_eci=sc.v_eci,
-        r_lla=sc.get_state('lla', ft),
+        r_lla=r_lla,
         central_body=EARTH,
         all_basis=all_basis,
-        markers=spacecraft_1.markers,
+        markers=sc.markers,
         scale_km_per_unit=1000.0,
     )
 
